@@ -49,3 +49,19 @@ func BenchmarkRouterFiveMiddleware(b *testing.B) {
 		r.ServeHTTP(rec, req)
 	}
 }
+
+// BenchmarkRouterErrorHandler measures the error-returning handler path where
+// the handler succeeds (nil error, no error-handler dispatch).
+func BenchmarkRouterErrorHandler(b *testing.B) {
+	r := New()
+	r.GetE("/users/{id}", func(w http.ResponseWriter, req *http.Request) error {
+		return nil
+	})
+	req := httptest.NewRequest(http.MethodGet, "/users/42", nil)
+	rec := httptest.NewRecorder()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		r.ServeHTTP(rec, req)
+	}
+}
