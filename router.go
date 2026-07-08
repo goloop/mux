@@ -124,17 +124,35 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	h, pattern := root.mux.Handler(req)
-	if pattern != "" {
-		h.ServeHTTP(w, req)
+	// ServeMux answers "OPTIONS *" (RequestURI == "*") with 400 before any
+	// routing; Handler(req) does not, so delegate to keep that behaviour.
+	if req.RequestURI == "*" {
+		root.mux.ServeHTTP(w, req)
 		return
 	}
 
-	// No pattern matched: the standard handler replies with either 404 or 405.
-	// Run it against a sniffer to learn which, discarding its output, then emit
-	// the configured reply.
+	h, pattern := root.mux.Handler(req)
+	if pattern != "" {
+		// Delegate to ServeMux.ServeHTTP, not the returned handler: only the
+		// former fills the request's path values and Pattern, so PathValue/Param
+		// keep working when a custom 404/405 handler is configured.
+		root.mux.ServeHTTP(w, req)
+		return
+	}
+
+	// No pattern matched: the standard handler replies with either 404, 405 or
+	// an internal redirect (e.g. for a "dirty" path that cleans to an unmatched
+	// route). Run it against a sniffer to learn which, discarding its output.
 	sn := &sniffer{header: make(http.Header)}
 	h.ServeHTTP(sn, req)
+
+	// Anything other than 404/405 (a redirect, a 400) is a genuine standard
+	// response; replay it against the real writer instead of overriding it.
+	if sn.status != http.StatusNotFound &&
+		sn.status != http.StatusMethodNotAllowed {
+		root.mux.ServeHTTP(w, req)
+		return
+	}
 
 	if sn.status == http.StatusMethodNotAllowed {
 		if allow := sn.header.Get("Allow"); allow != "" {

@@ -31,7 +31,12 @@ func joinPattern(prefix, rest string) string {
 	// a slash, so the first slash marks where the path begins.
 	slash := strings.IndexByte(rest, '/')
 	if slash < 0 {
-		// No path at all: treat the whole thing as a path fragment.
+		// No slash: inside a Route prefix a bare word is treated as a relative
+		// path fragment (Route("/api") + "users" -> "/api/users"), a documented
+		// convenience. This does mean a host-only string without a path is
+		// folded into the path here rather than rejected as it would be at the
+		// top level; that ambiguity is accepted so the path-fragment shorthand
+		// keeps working.
 		return joinPath(prefix, "/"+rest)
 	}
 	host, path := rest[:slash], rest[slash:]

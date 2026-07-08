@@ -30,13 +30,20 @@ func (r *Router) mount(prefix string, h http.Handler, strip bool) {
 		return
 	}
 
-	target := h
 	if strip {
-		target = http.StripPrefix(base, h)
+		// A request for exactly the prefix ("/admin") would leave StripPrefix
+		// with an empty path, which a mounted sub-router cleans to "/" and
+		// redirects to the site root, dropping the prefix. Redirect the exact
+		// prefix to the subtree root instead, so the stripped handler only ever
+		// sees a non-empty path and relative URLs resolve correctly.
+		r.register(base, http.RedirectHandler(base+"/", http.StatusTemporaryRedirect))
+		r.register(base+"/", http.StripPrefix(base, h))
+		return
 	}
 
-	// Register the exact prefix and the subtree separately so the standard mux
-	// does not emit a redirect from "/admin" to "/admin/".
-	r.register(base, target)
-	r.register(base+"/", target)
+	// Mount (no strip): the handler sees the original, unmodified path, so the
+	// exact prefix and the subtree can share it with no empty-path problem and
+	// no standard redirect from "/admin" to "/admin/".
+	r.register(base, h)
+	r.register(base+"/", h)
 }
