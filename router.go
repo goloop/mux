@@ -182,6 +182,10 @@ type sniffer struct {
 	status int
 }
 
+// Header exposes the captured header map. WriteHeader records the status the
+// standard mux would have sent, and Write reports the body as written while
+// discarding it, so the sniffer fully satisfies http.ResponseWriter without
+// touching the client.
 func (s *sniffer) Header() http.Header         { return s.header }
 func (s *sniffer) WriteHeader(code int)        { s.status = code }
 func (s *sniffer) Write(b []byte) (int, error) { return len(b), nil }
