@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-12
+
+### Changed
+- Custom `404` and `405` responses now run through the router-level middleware
+  chain (added with `Use` on the router from `New`), so security headers, CORS
+  and logging cover error replies too. Previously these handlers were invoked
+  directly and bypassed middleware. Middleware may therefore run without a
+  matched route, where `PathValue`/`Param` are empty.
+
+### Fixed
+- An error-returning handler (`GetE` and friends) that already wrote a response
+  and then returns an error no longer has the error handler write a second,
+  corrupting response; the error handler is skipped once anything was written.
+  The wrapping writer forwards `Unwrap`, so `http.ResponseController` still
+  reaches the underlying `Flusher`/`Hijacker`.
+- A zero-value `Router{}` (not built with `New`) panics with a clear
+  "use mux.New()" message instead of a raw nil dereference.
+
+### Documentation
+- Documented that a `Route` prefix folds a slashless token into the path, so a
+  host pattern must include a slash (`example.com/`).
+
 ## [0.1.2] - 2026-07-10
 
 ### Documentation

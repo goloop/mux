@@ -94,6 +94,9 @@ func (r *Router) Head(path string, h http.HandlerFunc) { r.Method(http.MethodHea
 // register wraps h with the current middleware snapshot and installs it on the
 // shared ServeMux. Wrapping happens once, at registration time.
 func (r *Router) register(pattern string, h http.Handler) {
+	if r.mux == nil {
+		panic("mux: Router must be created with mux.New()")
+	}
 	r.mux.Handle(pattern, r.wrap(h))
 }
 
@@ -118,6 +121,9 @@ func (r *Router) clone() *Router {
 // handlers are configured, it inspects the standard reply first and substitutes
 // the configured handler; otherwise it delegates directly with no overhead.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if r.root == nil || r.mux == nil {
+		panic("mux: Router must be created with mux.New()")
+	}
 	root := r.root
 	if root.notFound == nil && root.methodNotAllowed == nil {
 		root.mux.ServeHTTP(w, req)
@@ -154,24 +160,33 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Dispatch the error response through the root middleware chain, so
+	// controls added with Use (security headers, CORS, logging) cover 404/405
+	// replies too, not only matched routes. Middleware may therefore run
+	// without a matched route: request path values are empty on this path.
+	var final http.Handler
 	if sn.status == http.StatusMethodNotAllowed {
-		if allow := sn.header.Get("Allow"); allow != "" {
-			w.Header().Set("Allow", allow)
+		allow := sn.header.Get("Allow")
+		h := root.methodNotAllowed
+		if h == nil {
+			h = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				http.Error(w, http.StatusText(http.StatusMethodNotAllowed),
+					http.StatusMethodNotAllowed)
+			})
 		}
-		if root.methodNotAllowed != nil {
-			root.methodNotAllowed.ServeHTTP(w, req)
-			return
+		final = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if allow != "" {
+				w.Header().Set("Allow", allow)
+			}
+			h.ServeHTTP(w, req)
+		})
+	} else {
+		final = root.notFound
+		if final == nil {
+			final = http.HandlerFunc(http.NotFound)
 		}
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed),
-			http.StatusMethodNotAllowed)
-		return
 	}
-
-	if root.notFound != nil {
-		root.notFound.ServeHTTP(w, req)
-		return
-	}
-	http.NotFound(w, req)
+	root.wrap(final).ServeHTTP(w, req)
 }
 
 // sniffer is a throwaway ResponseWriter used only on the unmatched path to read

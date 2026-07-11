@@ -117,8 +117,12 @@ A middleware is `func(http.Handler) http.Handler`.
 - `Chain(m...)` composes middleware into one.
 
 Middleware are captured when a route is registered, so route-scoped middleware
-can read path values. **They do not run for `404` or `405`.** For app-wide
-middleware that must observe every request, wrap the router itself:
+can read path values. Root middleware (added with `Use` on the router returned
+by `New`) also runs for custom `404` and `405` responses, so security headers,
+CORS and logging cover error replies too. On that path there is no matched
+route, so `PathValue`/`Param` are empty; middleware that assumes a matched route
+should be scoped per route instead. For app-wide middleware that must observe
+every request, including redirects and `OPTIONS *`, wrap the router itself:
 
 ```go
 http.ListenAndServe(":8080", mux.Chain(requestID, recoverer, logger)(r))
@@ -153,6 +157,14 @@ A non-nil error goes to the router's `ErrorHandler`. If none is set, the default
 replies with a generic JSON `500` via `goloop/resp` and does not leak the error
 text. A nil error means the handler already wrote the response; nothing extra
 happens.
+
+Return the error **before writing** any status or body. If the handler already
+wrote and then returns an error, the error handler is skipped (it would
+otherwise corrupt the response with a second status and extra bytes), so the
+partial response the handler wrote is what the client receives.
+
+The router must be created with `mux.New()`; a zero-value `Router{}` panics with
+a clear message rather than a nil dereference.
 
 Available: `GetE`, `PostE`, `PutE`, `PatchE`, `DeleteE`, `MethodE`,
 `HandleError`.

@@ -11,11 +11,38 @@ func (r *Router) toHandlerFunc(h HandlerFunc) http.HandlerFunc {
 		eh = defaultErrorHandler
 	}
 	return func(w http.ResponseWriter, req *http.Request) {
-		if err := h(w, req); err != nil {
+		tw := &trackingWriter{ResponseWriter: w}
+		if err := h(tw, req); err != nil && !tw.wrote {
+			// Only invoke the error handler when nothing has been written yet.
+			// If the handler already sent status or body and then returned an
+			// error, calling the error handler would corrupt the response with
+			// a second WriteHeader and extra bytes. Return an error before
+			// writing anything.
 			eh(w, req, err)
 		}
 	}
 }
+
+// trackingWriter records whether a response has been started, so the error
+// handler is skipped once the wrapped handler has already written. It forwards
+// Unwrap so http.ResponseController still reaches the underlying writer's
+// Flusher, Hijacker and deadline methods.
+type trackingWriter struct {
+	http.ResponseWriter
+	wrote bool
+}
+
+func (t *trackingWriter) WriteHeader(code int) {
+	t.wrote = true
+	t.ResponseWriter.WriteHeader(code)
+}
+
+func (t *trackingWriter) Write(b []byte) (int, error) {
+	t.wrote = true
+	return t.ResponseWriter.Write(b)
+}
+
+func (t *trackingWriter) Unwrap() http.ResponseWriter { return t.ResponseWriter }
 
 // HandleError registers an error-returning handler for a full ServeMux pattern.
 func (r *Router) HandleError(pattern string, h HandlerFunc) {
