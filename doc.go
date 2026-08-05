@@ -48,6 +48,21 @@
 //	    return resp.JSON(w, resp.R{"id": mux.Param(req, "id")})
 //	})
 //
+// Route conflicts. Two patterns that overlap without one being more specific
+// panic at registration, exactly as http.ServeMux does. Every route in an
+// application is installed from one line inside this package, which is the
+// location the standard mux would otherwise report - for both halves of the
+// conflict - so the panic is rewritten to name the two lines in the
+// application instead:
+//
+//	panic: mux: pattern "GET /conversations/messages/{id}" (registered at
+//	server.go:346) conflicts with pattern "GET /conversations/{id}/messages"
+//	(registered at server.go:341): ...
+//
+// The standard explanation of why the patterns clash is kept word for word;
+// only the locations are corrected. Any other registration failure, such as a
+// malformed pattern, is reported as "mux: <file>:<line>: <standard message>".
+//
 // Concurrency. Register all routes before the server starts serving. Like
 // http.ServeMux, a Router is safe for concurrent reads (serving) once routes
 // are in place, but registering routes concurrently with serving is not

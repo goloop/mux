@@ -24,6 +24,8 @@ server and composes with any middleware of the form
 - Error-returning handlers - `GetE`/`PostE`/... plus a central `ErrorHandler`,
   with a JSON 500 default via `goloop/resp`.
 - Path parameters through the standard `r.PathValue`, aliased as `mux.Param`.
+- Route conflicts name the two lines in *your* route table, not the one line
+  inside this package that every registration passes through.
 - Custom `404` and `405` handlers via options; the standard `Allow` header is
   preserved.
 
