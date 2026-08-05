@@ -69,8 +69,22 @@ r.HandleFunc("GET /x", h)
 власних перевірок методу.
 
 Реєстрація двох хендлерів на один патерн викликає panic - так само, як у
-`net/http`. Це навмисно: помилки розробника мають випливати одразу; у v0 ми їх не
+`net/http`. Це навмисно: помилки розробника мають випливати одразу; ми їх не
 ковтаємо і не перетворюємо на `error`.
+
+Panic називає два рядки вашої таблиці маршрутів, які конфліктують:
+
+```
+panic: mux: pattern "GET /conversations/messages/{id}" (registered at server.go:346) conflicts with pattern "GET /conversations/{id}/messages" (registered at server.go:341):
+GET /conversations/messages/{id} and GET /conversations/{id}/messages both match some paths, like "/conversations/messages/messages".
+But neither is more specific than the other.
+```
+
+Кожен маршрут застосунку встановлюється з одного рядка всередині цього пакета -
+саме його стандартний mux інакше показав би для **обох** сторін конфлікту.
+Пояснення, *чому* патерни конфліктують, лишається стандартним і незмінним. Будь-яка
+інша помилка реєстрації (наприклад, зіпсований патерн) подається як
+`mux: server.go:346: <стандартне повідомлення>`.
 
 ## Параметри шляху
 

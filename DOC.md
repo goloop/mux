@@ -71,7 +71,21 @@ method checks of your own.
 
 Registering two handlers for the same pattern panics, exactly as `net/http`
 does. This surfaces developer mistakes early; it is not caught or turned into an
-error in v0.
+error.
+
+The panic names the two lines in your route table that clash:
+
+```
+panic: mux: pattern "GET /conversations/messages/{id}" (registered at server.go:346) conflicts with pattern "GET /conversations/{id}/messages" (registered at server.go:341):
+GET /conversations/messages/{id} and GET /conversations/{id}/messages both match some paths, like "/conversations/messages/messages".
+But neither is more specific than the other.
+```
+
+Every route in an application is installed from one line inside this package, so
+that is the location the standard mux would otherwise report - for both halves
+of the conflict. The explanation of *why* the patterns clash is the standard
+one, unchanged. Any other registration failure, such as a malformed pattern, is
+reported as `mux: server.go:346: <standard message>`.
 
 ## Path parameters
 

@@ -33,11 +33,15 @@ type Router struct {
 	// only meaningful on the root router and are read in ServeHTTP.
 	notFound         http.Handler
 	methodNotAllowed http.Handler
+
+	// reg records where each pattern was registered from, so a conflict can
+	// name the application's lines. Sub-routers share the one instance.
+	reg *registry
 }
 
 // New creates a Router with a fresh ServeMux and applies the given options.
 func New(opts ...Option) *Router {
-	r := &Router{mux: http.NewServeMux()}
+	r := &Router{mux: http.NewServeMux(), reg: &registry{}}
 	r.root = r
 	for _, opt := range opts {
 		opt(r)
@@ -93,11 +97,36 @@ func (r *Router) Head(path string, h http.HandlerFunc) { r.Method(http.MethodHea
 
 // register wraps h with the current middleware snapshot and installs it on the
 // shared ServeMux. Wrapping happens once, at registration time.
+//
+// The standard mux panics on a conflicting or malformed pattern and blames the
+// caller of Handle, which is this line for every route in the application.
+// The real caller is captured first and put back into the message on the way
+// out; see registry.retarget.
 func (r *Router) register(pattern string, h http.Handler) {
 	if r.mux == nil {
 		panic("mux: Router must be created with mux.New()")
 	}
+
+	site := callSite()
+	if failure := r.install(pattern, h); failure != nil {
+		// Raised here, and not inside the function that recovered it, so the
+		// runtime prints one panic - the corrected one - rather than chaining
+		// it after the standard mux's original with its misleading location.
+		panic(r.reg.retarget(failure, site))
+	}
+
+	// Recorded only once the registration has succeeded, so that a pattern
+	// registered twice still reports the first call site as the one the
+	// second registration collides with.
+	r.reg.remember(pattern, site)
+}
+
+// install hands the wrapped handler to the standard mux, returning the value
+// it panicked with instead of letting that panic escape.
+func (r *Router) install(pattern string, h http.Handler) (failure any) {
+	defer func() { failure = recover() }()
 	r.mux.Handle(pattern, r.wrap(h))
+	return nil
 }
 
 // wrap applies this router's middleware to h from innermost to outermost, so

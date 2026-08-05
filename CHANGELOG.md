@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-08-05
+
+### Changed
+- A route conflict now names the two lines in the application that registered
+  the clashing patterns, instead of the single line inside this package that
+  every route passes through on its way to the standard mux. The standard
+  explanation of why the patterns clash is kept word for word; only the two
+  locations are corrected. Any other registration failure, such as a malformed
+  pattern, is reported as `mux: <file>:<line>: <standard message>`. A message
+  this package cannot parse - a future wording change in the standard library -
+  is passed through untouched rather than half-rewritten.
+
+## [1.0.0] - 2026-07-12
+
+The `0.2.0` tree promoted to a stable tag; no code changes.
+
 ## [0.2.0] - 2026-07-12
 
 ### Changed
