@@ -122,7 +122,15 @@ without a leading slash gets one, and `/{$}` (exact match) is preserved.
 
 ## Middleware
 
-A middleware is `func(http.Handler) http.Handler`.
+A middleware is `func(http.Handler) http.Handler`, and `mux.Middleware` is an
+alias for exactly that type rather than a distinct named type. The alias is
+what lets a value from any middleware package - `goloop/middlewares` or a
+third-party one - be passed to `Use` directly, with no conversion:
+
+```go
+r.Use(middlewares.Throttle(8))          // just works
+r.Use(middlewares.RateLimit(cfg))       // so does anything of the same shape
+```
 
 - `Use(m...)` appends middleware to the current router. They apply to routes
   registered afterwards and to sub-routers created from it.

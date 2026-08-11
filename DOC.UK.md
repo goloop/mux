@@ -119,7 +119,15 @@ r.Group(func(r *mux.Router) {
 
 ## Middleware
 
-Middleware - це `func(http.Handler) http.Handler`.
+Middleware - це `func(http.Handler) http.Handler`, і `mux.Middleware` - аліас
+рівно цього типу, а не окремий іменований тип. Саме аліас дозволяє передавати
+в `Use` значення з будь-якого middleware-пакета - `goloop/middlewares` чи
+стороннього - без жодної конверсії:
+
+```go
+r.Use(middlewares.Throttle(8))          // просто працює
+r.Use(middlewares.RateLimit(cfg))       // як і будь-що тієї самої форми
+```
 
 - `Use(m...)` додає middleware до поточного роутера. Вони діють на маршрути,
   зареєстровані **після** цього, і на створені з нього суброутери.
