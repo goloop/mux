@@ -7,9 +7,15 @@ import (
 )
 
 // Middleware is the standard net/http middleware shape: it wraps a handler and
-// returns a new handler. Any function of this type - including those from the
+// returns a new handler. Any function of this shape - including those from the
 // goloop/middlewares package or third-party libraries - works with a Router.
-type Middleware func(http.Handler) http.Handler
+//
+// It is an alias rather than a defined type on purpose. Every middleware
+// package declares its own name for this same shape, and two defined types
+// with one underlying type still demand an explicit conversion at every
+// boundary; an alias makes a value of any of them assignable here directly, so
+// r.Use(middlewares.Throttle(8)) works as written.
+type Middleware = func(http.Handler) http.Handler
 
 // HandlerFunc is an http handler that returns an error. It is not a replacement
 // for http.HandlerFunc; it is an optional adapter for code that writes
