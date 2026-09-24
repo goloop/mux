@@ -188,6 +188,19 @@ wrote and then returns an error, the error handler is skipped (it would
 otherwise corrupt the response with a second status and extra bytes), so the
 partial response the handler wrote is what the client receives.
 
+The response counts as written once anything has committed it: a `Write`, a
+final `WriteHeader`, a `Flush` (which sends the implicit `200`), a successful
+`Hijack`, or a body written through `ReadFrom`. An informational `1xx`, such
+as `103 Early Hints`, does not commit anything, so a handler may send hints
+and still return an error that the error handler turns into a final status;
+`101 Switching Protocols` does commit, since the exchange is over.
+
+The writer handed to a `HandlerFunc` exposes the same optional interfaces as
+the one underneath it, so `w.(http.Flusher)`, `w.(http.Hijacker)` and
+`io.ReaderFrom` work exactly as they do in a plain handler, and nothing is
+declared that the underlying writer cannot do. `http.ResponseController` also
+works, through `Unwrap`.
+
 The router must be created with `mux.New()`; a zero-value `Router{}` panics with
 a clear message rather than a nil dereference.
 

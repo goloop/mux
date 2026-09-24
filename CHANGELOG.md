@@ -40,6 +40,34 @@ request, and reports this router's own routing state.
   1130 ns, 736 B and 20, and a `404` from about 970 ns and 744 B to about
   840 ns and 624 B.
 
+## [1.3.0] - 2026-09-24
+
+Minor release: the `*E` handlers now know when a response has really been
+committed, and the writer they are given keeps the capabilities of the one
+underneath it.
+
+### Fixed
+- A flushed response counts as written. `Flush`, through
+  `http.ResponseController` or a direct `http.Flusher`, sends the implicit
+  `200`, but the wrapper did not notice, so a handler that flushed headers and
+  then failed had the error handler append an error body under a status
+  already on the wire. A successful `Hijack` and a body written through
+  `ReadFrom` count as written too.
+- An informational `1xx` no longer counts as the final response. Any status at
+  all committed the response, so a handler that sent `103 Early Hints` and
+  then returned an error had that error dropped, and the request ended with an
+  empty `200`. A `1xx` now leaves the error handler free to produce the final
+  status, as `net/http` itself treats it; `101 Switching Protocols` still
+  commits.
+
+### Changed
+- The writer passed to a `HandlerFunc` exposes exactly the optional interfaces
+  of the writer beneath it. Wrapping hid them all, so moving a handler from
+  `Get` to `GetE` silently turned streaming into buffering (`w.(http.Flusher)`
+  stopped matching), made an upgrade unable to hijack, and cost `io.Copy` its
+  `ReaderFrom` fast path. Nothing is declared that the underlying writer
+  cannot do, and the `*E` path still allocates what it did before.
+
 ## [1.1.1] - 2026-08-11
 
 Patch release.
