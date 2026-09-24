@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-09-24
+
+Patch release.
+
+### Documentation
+- The package documentation states when a response counts as committed for the
+  `*E` handlers (a write, a final status, a flush, a successful hijack or a
+  `ReadFrom`, but not an informational `1xx`), that the writer they receive
+  keeps the optional interfaces of the one beneath it, and that a `MountStrip`
+  prefix has to be a literal path.
+
 ## [1.2.0] - 2026-09-24
 
 Minor release: the custom 404/405 path stops rebuilding itself on every

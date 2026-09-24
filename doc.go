@@ -56,6 +56,21 @@
 //	    return resp.JSON(w, resp.R{"id": mux.Param(req, "id")})
 //	})
 //
+// Return the error before writing anything: once the response is committed the
+// error handler is skipped, since a second status and extra bytes would
+// corrupt what the client is already receiving. A Write, a final WriteHeader,
+// a Flush, a successful Hijack or a body written through ReadFrom all commit
+// it; an informational 1xx such as 103 Early Hints does not, so a handler may
+// send hints and still fail into the error handler. The writer these handlers
+// receive exposes the same optional interfaces as the one beneath it, so
+// http.Flusher, http.Hijacker, io.ReaderFrom and http.ResponseController all
+// behave as they do in a plain handler.
+//
+// Mounting. Mount attaches a handler at a prefix and passes the original path
+// to it; MountStrip removes the prefix first, which requires the prefix to be
+// a literal path, so a wildcard such as "/orgs/{org}" is refused at
+// registration rather than matching nothing at run time.
+//
 // Route conflicts. Two patterns that overlap without one being more specific
 // panic at registration, exactly as http.ServeMux does. Every route in an
 // application is installed from one line inside this package, which is the
