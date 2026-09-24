@@ -8,7 +8,29 @@ import (
 
 func noop(w http.ResponseWriter, r *http.Request) {}
 
-func passMW(next http.Handler) http.Handler { return next }
+// realMW wraps: it adds a call to the chain, which is what a benchmark of a
+// chain has to measure. A middleware that returns next unchanged adds nothing
+// at all, so a "five middleware" benchmark built on one measured no chain.
+func realMW(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+	})
+}
+
+// BenchmarkRouterStaticRoute measures the shortest path there is: a static
+// route with no middleware, where the router should add nothing to the
+// standard mux but a delegation.
+func BenchmarkRouterStaticRoute(b *testing.B) {
+	r := New()
+	r.Get("/static", noop)
+	req := httptest.NewRequest(http.MethodGet, "/static", nil)
+	rec := httptest.NewRecorder()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		r.ServeHTTP(rec, req)
+	}
+}
 
 // BenchmarkStdServeMux is the baseline: the standard library on its own.
 func BenchmarkStdServeMux(b *testing.B) {
@@ -39,7 +61,7 @@ func BenchmarkRouterNoMiddleware(b *testing.B) {
 // BenchmarkRouterFiveMiddleware measures the cost of a five-deep chain.
 func BenchmarkRouterFiveMiddleware(b *testing.B) {
 	r := New()
-	r.Use(passMW, passMW, passMW, passMW, passMW)
+	r.Use(realMW, realMW, realMW, realMW, realMW)
 	r.Get("/users/{id}", noop)
 	req := httptest.NewRequest(http.MethodGet, "/users/42", nil)
 	rec := httptest.NewRecorder()
@@ -64,14 +86,6 @@ func BenchmarkRouterErrorHandler(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		r.ServeHTTP(rec, req)
 	}
-}
-
-// realMW is a middleware that actually wraps: passMW returns next unchanged,
-// so a benchmark built on it measures no chain at all.
-func realMW(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
-	})
 }
 
 // BenchmarkCustomNotFound measures the unmatched path with a custom handler,

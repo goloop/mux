@@ -219,8 +219,15 @@ r.MountStrip("/admin", adminRouter)  // same, but strips /admin first
 - `MountStrip` applies `http.StripPrefix`, so a self-contained handler or
   sub-router routes relative to its own root.
 
-Both register the exact prefix and the subtree separately, so there is no
-redirect from `/admin` to `/admin/`.
+`Mount` registers the exact prefix and the subtree separately, so there is no
+redirect from `/admin` to `/admin/`. `MountStrip` cannot do that: stripping the
+prefix from `/admin` would leave an empty path, so a request for exactly the
+prefix is answered with a `307` to `/admin/`, carrying the query with it.
+
+A `MountStrip` prefix must be a literal path. A wildcard (`/orgs/{org}`) or a
+percent-encoded prefix cannot be stripped from a path and is refused at
+registration, rather than registering successfully and then answering `404`
+for everything under the mount.
 
 ## Custom 404 and 405
 

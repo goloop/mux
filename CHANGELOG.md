@@ -68,6 +68,37 @@ underneath it.
   `ReaderFrom` fast path. Nothing is declared that the underlying writer
   cannot do, and the `*E` path still allocates what it did before.
 
+## [1.4.0] - 2026-09-24
+
+Minor release: `MountStrip` keeps the query and refuses a prefix it could
+never strip.
+
+### Fixed
+- The redirect from the exact mount prefix to its subtree root carries the
+  query. `MountStrip("/panel", h)` answered `GET /panel?token=abc` with a
+  `307` to `/panel/`, dropping the query entirely, because the redirect was
+  built once from a string and knew nothing of the request it answered. Tokens,
+  callbacks and filters survive the redirect now, byte for byte as they
+  arrived.
+
+### Changed
+- `MountStrip` refuses a prefix it cannot strip. A wildcard
+  (`MountStrip("/orgs/{org}", h)`), including one inherited from an enclosing
+  `Route`, and a percent-encoded prefix both registered successfully and then
+  matched nothing, so every request under the mount was answered with `404`
+  while the mounted handler was never reached. Either now panics at
+  registration, where the mistake is. `Mount`, which passes the original path
+  through and has nothing to strip, still accepts both.
+- The reference said neither `Mount` variant redirects `/admin` to `/admin/`.
+  `MountStrip` always did, and has to: stripping the prefix from the bare path
+  would leave the handler an empty one. Both references say so now.
+
+### Tests
+- `BenchmarkRouterFiveMiddleware` measures five middleware. It was built on a
+  middleware that returned the next handler unchanged, so the benchmark
+  measured a chain of nothing. Benchmarks for a static route and for the
+  custom `404`/`405` path were added alongside it.
+
 ## [1.1.1] - 2026-08-11
 
 Patch release.
