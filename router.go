@@ -3,6 +3,7 @@ package mux
 import (
 	"net/http"
 	"slices"
+	"sync"
 )
 
 // Router is an ergonomic wrapper around http.ServeMux. It is an http.Handler,
@@ -37,11 +38,30 @@ type Router struct {
 	// reg records where each pattern was registered from, so a conflict can
 	// name the application's lines. Sub-routers share the one instance.
 	reg *registry
+
+	// fb holds the prepared 404 and 405 chains. It is a pointer because
+	// clone copies a Router by value and a sync.Once must not be copied;
+	// every router in a tree shares the root's one instance.
+	fb *fallbacks
+}
+
+// fallbacks holds the handlers used when no route matched, built once and
+// then only served.
+//
+// They used to be assembled inside ServeHTTP, which meant every middleware
+// constructor ran again on every 404 and 405: whatever state a middleware set
+// up per wrapping was thrown away between requests, a constructor that starts
+// a worker started one per request, and constructors written for sequential
+// registration suddenly ran concurrently.
+type fallbacks struct {
+	once       sync.Once
+	notFound   http.Handler
+	notAllowed http.Handler
 }
 
 // New creates a Router with a fresh ServeMux and applies the given options.
 func New(opts ...Option) *Router {
-	r := &Router{mux: http.NewServeMux(), reg: &registry{}}
+	r := &Router{mux: http.NewServeMux(), reg: &registry{}, fb: &fallbacks{}}
 	r.root = r
 	for _, opt := range opts {
 		opt(r)
@@ -193,29 +213,79 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// controls added with Use (security headers, CORS, logging) cover 404/405
 	// replies too, not only matched routes. Middleware may therefore run
 	// without a matched route: request path values are empty on this path.
-	var final http.Handler
+	// The chains are built once, on the first reply that needs them.
+	fb := root.fallbackChains()
 	if sn.status == http.StatusMethodNotAllowed {
-		allow := sn.header.Get("Allow")
-		h := root.methodNotAllowed
-		if h == nil {
-			h = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				http.Error(w, http.StatusText(http.StatusMethodNotAllowed),
-					http.StatusMethodNotAllowed)
-			})
+		// Allow belongs to this request, so it is written on this request's
+		// writer rather than carried into a chain shared by all of them. The
+		// middleware therefore sees it, and the handler can still change it.
+		if allow := sn.header.Get("Allow"); allow != "" {
+			w.Header().Set("Allow", allow)
 		}
-		final = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			if allow != "" {
-				w.Header().Set("Allow", allow)
-			}
-			h.ServeHTTP(w, req)
-		})
-	} else {
-		final = root.notFound
-		if final == nil {
-			final = http.HandlerFunc(http.NotFound)
-		}
+		fb.notAllowed.ServeHTTP(w, req)
+		return
 	}
-	root.wrap(final).ServeHTTP(w, req)
+	fb.notFound.ServeHTTP(w, req)
+}
+
+// fallbackChains prepares the 404 and 405 handlers, once. It is called from
+// the serving path, so a router configured and then served concurrently still
+// builds each chain exactly once; middleware added after the first fallback
+// reply does not reach these chains, which is the documented contract that
+// configuration is finished before serving begins.
+func (r *Router) fallbackChains() *fallbacks {
+	r.fb.once.Do(func() {
+		notFound := r.notFound
+		if notFound == nil {
+			notFound = http.HandlerFunc(http.NotFound)
+		}
+
+		notAllowed := r.methodNotAllowed
+		if notAllowed == nil {
+			notAllowed = http.HandlerFunc(
+				func(w http.ResponseWriter, req *http.Request) {
+					http.Error(w, http.StatusText(http.StatusMethodNotAllowed),
+						http.StatusMethodNotAllowed)
+				})
+		}
+		r.fb.notFound = freshMatch(r.wrap(notFound))
+		r.fb.notAllowed = freshMatch(r.wrap(notAllowed))
+	})
+	return r.fb
+}
+
+// freshMatch returns h behind a ServeMux of its own, so that a request
+// reaching it carries this router's match state rather than the one it came
+// in with.
+//
+// It matters when a Router is mounted inside another ServeMux: a request that
+// matched "/tenant/{tenant}/{rest...}" out there still carried that pattern
+// and its path values into the fallback, so anything reading Pattern or Param
+// saw a match this router never made. A pattern and its wildcard values are
+// private to net/http and cannot be cleared from the outside; dispatching
+// through a mux that matches everything and names nothing is what replaces
+// them, exactly as the ordinary serving path does.
+func freshMatch(h http.Handler) http.Handler {
+	m := http.NewServeMux()
+	m.Handle("/", http.HandlerFunc(
+		func(w http.ResponseWriter, req *http.Request) {
+			// The dispatch above leaves Pattern as "/", which is this mux's
+			// business, not a route the application registered.
+			req.Pattern = ""
+			h.ServeHTTP(w, req)
+		}))
+
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.Pattern == "" {
+			// Nothing matched this request before it arrived, so there is no
+			// foreign match state to replace and no reason to pay for a
+			// second dispatch. This is the ordinary case: a router serving
+			// at the top of a server.
+			h.ServeHTTP(w, req)
+			return
+		}
+		m.ServeHTTP(w, req)
+	})
 }
 
 // sniffer is a throwaway ResponseWriter used only on the unmatched path to read

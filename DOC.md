@@ -142,8 +142,11 @@ Middleware are captured when a route is registered, so route-scoped middleware
 can read path values. Root middleware (added with `Use` on the router returned
 by `New`) also runs for custom `404` and `405` responses, so security headers,
 CORS and logging cover error replies too. On that path there is no matched
-route, so `PathValue`/`Param` are empty; middleware that assumes a matched route
-should be scoped per route instead. For app-wide middleware that must observe
+route, so `PathValue`/`Param` are empty, even when this router is mounted
+inside another one that did match; middleware that assumes a matched route
+should be scoped per route instead. The `404` and `405` chains are built once,
+on the first reply that needs one, so middleware added after that point does
+not reach them. For app-wide middleware that must observe
 every request, including redirects and `OPTIONS *`, wrap the router itself:
 
 ```go

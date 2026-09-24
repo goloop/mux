@@ -97,9 +97,13 @@ does not change matching. Conflicting patterns panic, exactly as `net/http` does
 ## Middleware model
 
 Middleware added with `Use` or `With` are captured when a route is registered,
-so they can read path values via `mux.Param`. They do **not** run for unmatched
-requests (`404`) or method mismatches (`405`). For application-wide middleware
-that must run for every request, wrap the router - it is a plain `http.Handler`:
+so they can read path values via `mux.Param`. Middleware on the root router
+also run for a **custom** `404`/`405` reply, but not for the standard one,
+which the `ServeMux` answers directly; on that path no route matched, so
+`mux.Param` is empty. The fallback chain is built once, on the first reply that
+needs it, so middleware added after that does not reach it. For
+application-wide middleware that must run for every request, wrap the router -
+it is a plain `http.Handler`:
 
 ```go
 handler := requestID(recoverer(logger(r)))

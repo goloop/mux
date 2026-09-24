@@ -30,10 +30,18 @@
 //
 // Middleware model. Middleware registered with Use or With are applied at
 // registration time, wrapping the final handler. Because a handler runs after
-// routing, such middleware can read path values via mux.Param. Middleware do
-// NOT run for unmatched requests (404) or method mismatches (405). For
-// application-wide middleware that must run for every request, wrap the whole
-// router, which is a plain http.Handler:
+// routing, such middleware can read path values via mux.Param. Middleware on
+// the root router also run for a custom 404 or 405 reply, so security headers,
+// CORS and logging cover those too; they do not run for the standard 404/405,
+// which the ServeMux answers directly. On that path no route matched, so
+// mux.Param is empty and the request carries no pattern.
+//
+// The 404 and 405 chains are built once, on the first reply that needs one, so
+// middleware added after that point does not reach them. This matches the rule
+// that routing is configured before the server starts serving. For
+// application-wide middleware that must run for every request, including
+// redirects and "OPTIONS *", wrap the whole router, which is a plain
+// http.Handler:
 //
 //	handler := requestID(recoverer(logger(r)))
 //	http.ListenAndServe(":8080", handler)

@@ -5,6 +5,41 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-24
+
+Minor release: the custom 404/405 path stops rebuilding itself on every
+request, and reports this router's own routing state.
+
+### Fixed
+- The middleware chain for a custom `404`/`405` reply is built once instead of
+  on every unmatched request. Rebuilding it meant every middleware constructor
+  ran again per request: state a middleware set up while wrapping was thrown
+  away between replies, a constructor that starts a worker started one per
+  request, and constructors written for sequential registration suddenly ran
+  concurrently. Fifty concurrent unmatched requests used to run the
+  constructor fifty-one times; they now run it once.
+- A custom fallback reports this router's match state. When a `Router` is
+  mounted inside another `ServeMux`, a request that matched something out
+  there (`/tenant/{tenant}/{rest...}`) carried that pattern and its path
+  values into the fallback, so logging, metrics or middleware reading
+  `Pattern` or `Param` saw a match this router never made. They are empty
+  there now, as they already were on the standard path, and the extra work is
+  skipped entirely when the request carries no outer match.
+
+### Changed
+- The `Allow` header of a method mismatch is set before the fallback chain
+  runs rather than inside it, so root middleware can see it. A custom handler
+  can still replace it.
+- `doc.go` and the README said middleware do not run for `404`/`405`, while
+  the reference said they do. Both are half right and now say so: they run for
+  a custom reply, not for the standard one.
+
+### Performance
+- The custom fallback path got cheaper as a side effect: with five middleware,
+  a `405` went from about 1290 ns, 904 B and 26 allocations per reply to about
+  1130 ns, 736 B and 20, and a `404` from about 970 ns and 744 B to about
+  840 ns and 624 B.
+
 ## [1.1.1] - 2026-08-11
 
 Patch release.
